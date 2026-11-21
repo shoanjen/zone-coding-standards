@@ -104,5 +104,5 @@ public Result<OrderVO> create(@RequestBody @Valid OrderCreateCmd cmd) {
 ### 边界情况
 
 - **参数校验分两层**：格式与范围校验（非空、长度、区间、格式）在入口层用 Bean Validation 完成——手册亦要求入口层完成参数合法性校验；业务规则校验（库存够不够、用户有没有资格）归 Service。判据：换个协议调用，这条规则还成立吗？成立 → Service。
-- **DTO→VO 的展示转换**：允许 Controller 调用 Converter 组件做纯字段映射；一旦转换里出现业务计算（按身份过滤字段、拼权限标记），下沉 Service。
+- **DTO→VO 的展示转换也不在 Controller 做**：转换（DO/DTO→VO）属于数据组装，一律归 Service 层——Service 返回现成的 VO，Controller 拿到即包装统一响应体；Converter 组件由 Service 调用。Controller 不触碰 VO 的字段结构，转换中出现业务计算（按身份过滤字段、拼权限标记）更是早已越界——那是 Service 的业务逻辑。
 - **不算业务逻辑的接入层职责**：统一返回体包装、全局异常处理（`@RestControllerAdvice`）、访问日志与链路埋点、HTTP 状态码表达。

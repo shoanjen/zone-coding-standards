@@ -67,8 +67,8 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
 1. **依赖边界**：Controller 只能引入 Service 业务层组件；禁止引入持久层组件（DAO/Repository/Mapper 等），触达数据与业务的基础设施同理下沉。
    ❌ Controller 直注 `OrderMapper` 绕过 Service 查库 ✅ 只注入 `OrderQueryService`
    判定问句：Controller 的构造器里，有没有 Service 以外的业务组件？
-2. **职责边界**：Controller 不写业务逻辑，只做三件事——接参数（含触发参数校验）、调 Service、组返回（统一响应体 + HTTP 语义）。
-   ❌ 在 Controller 里判库存、算金额、拼复杂对象 ✅ `Result.ok(orderCreateService.createOrder(cmd))`
+2. **职责边界**：Controller 不写业务逻辑、不做对象转换（DTO→VO 归 Service，Service 直接返回 VO），只做三件事——接参数（含触发参数校验）、调 Service、组返回（统一响应体 + HTTP 语义）。
+   ❌ 在 Controller 里判库存、算金额、调 Converter 转 VO ✅ `Result.ok(orderCreateService.createOrder(cmd))`（Service 直接给 VO）
    判定问句：Controller 里除了接参数、调 Service、包返回，还剩什么？剩了就越界。
 
 ## 编码自检
