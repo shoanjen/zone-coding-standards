@@ -1,6 +1,6 @@
 ---
 name: zone-coding-standards
-description: Java 编码规范基线：AI 执行任何 Java 编码任务（编写、修改、重构、评审、解释 Java 代码，设计 Java 类/组件/服务）时默认装载遵守，无需用户点名。规范裁决链固定为「项目自身规范 > 阿里巴巴 Java 开发手册 > 本 skill 自定义规则」，自定义规则含命名规范五条与组件规范四条，每条规则展开必带正反例与判定问句；表述业务领域中立，示例 Java 为主、必要处含 Spring Boot 写法。触发时机：用户要求实现/修改/重构/评审 Java 代码、解决命名或组件设计问题，或 AI 自检 Java 代码质量；落笔前装载，而非评审时才补救。
+description: Java 编码规范基线：AI 执行任何 Java 编码任务（编写、修改、重构、评审、解释 Java 代码，设计 Java 类/组件/服务）时默认装载遵守，无需用户点名。规范裁决链固定为「项目自身规范 > 阿里巴巴 Java 开发手册 > 本 skill 自定义规则」，自定义规则含命名规范五条、组件规范四条与分层规范（Controller 层两条），每条规则展开必带正反例与判定问句；表述业务领域中立，示例 Java 为主、必要处含 Spring Boot 写法。触发时机：用户要求实现/修改/重构/评审 Java 代码、解决命名、组件设计或分层放置问题，或 AI 自检 Java 代码质量；落笔前装载，而非评审时才补救。
 ---
 
 # Java 编码规范基线
@@ -60,7 +60,18 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
    ❌ B 为 A 暴露 public 中间方法 ✅ A 内 `assembleXxx()` private
    判定问句：这个方法是组件的「能力」还是「步骤」？步骤必须 private。
 
+## 分层规范 · Controller 层（两条）
+
+详述与边界情况见 [references/layering-guide.md](references/layering-guide.md)。
+
+1. **依赖边界**：Controller 只能引入 Service 业务层组件；禁止引入持久层组件（DAO/Repository/Mapper 等），触达数据与业务的基础设施同理下沉。
+   ❌ Controller 直注 `OrderMapper` 绕过 Service 查库 ✅ 只注入 `OrderQueryService`
+   判定问句：Controller 的构造器里，有没有 Service 以外的业务组件？
+2. **职责边界**：Controller 不写业务逻辑，只做三件事——接参数（含触发参数校验）、调 Service、组返回（统一响应体 + HTTP 语义）。
+   ❌ 在 Controller 里判库存、算金额、拼复杂对象 ✅ `Result.ok(orderCreateService.createOrder(cmd))`
+   判定问句：Controller 里除了接参数、调 Service、包返回，还剩什么？剩了就越界。
+
 ## 编码自检
 
-- **落笔前**：命名过五条；新写组件先想职责边界。
-- **交付前**：组件过四条；再对照手册【强制】条款速查（[references/alibaba-core.md](references/alibaba-core.md)）扫一遍。
+- **落笔前**：命名过五条；新写组件先想职责边界；接入层代码先想分层边界（只依赖 Service、不写业务）。
+- **交付前**：组件过四条、Controller 过两条；再对照手册【强制】条款速查（[references/alibaba-core.md](references/alibaba-core.md)）扫一遍。

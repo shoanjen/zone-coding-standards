@@ -1,0 +1,108 @@
+# 分层规范详述 · Controller 层
+
+「分层」约束回答的不是「组件怎么写」（那是组件规范的职责），而是「组件放在哪一层、允许依赖谁」。当前展开 Controller 层两条；Service/DAO 层条款按需扩展。
+
+分层依赖方向固定为单向，禁止回环、禁止跨层：
+
+```
+Controller（接入层） --> Service（业务层） --> DAO/Repository（持久层） --> 数据库
+```
+
+---
+
+## 规则一：依赖边界——Controller 只依赖业务层
+
+Controller 只能引入 **Service 层组件**（业务逻辑的唯一入口）；**禁止引入持久层组件**：DAO、Repository、Mapper、JPA Repository、MyBatis Mapper、JdbcTemplate 等一律不得出现在 Controller 的字段、构造参数与方法体内。
+
+### 反例
+
+```java
+// ❌ Controller 直连持久层——分层被打穿
+@RestController
+public class OrderController {
+    private final OrderMapper orderMapper;      // 禁止：持久层组件
+    private final JdbcTemplate jdbcTemplate;    // 禁止：裸 SQL 直查
+
+    @GetMapping("/orders/{id}")
+    public Result<OrderVO> detail(@PathVariable Long id) {
+        Order order = orderMapper.selectById(id);   // 绕过 Service 直查库
+        ...
+    }
+}
+```
+
+错在哪：
+
+- 绕过 Service 即绕过事务边界——该有的事务没有，绕过业务规则——缓存、权限、审计、防重全被跳过；
+- 同一份数据访问逻辑在 Controller 和 Service 各写一遍，分叉开始；
+- 依赖方向被打穿：上层可跨层直触最底层，分层只剩目录名。
+
+### 正例
+
+```java
+// ✅ 只引入 Service，数据访问一律经业务层
+@RestController
+public class OrderController {
+    private final OrderQueryService orderQueryService;
+
+    @GetMapping("/orders/{id}")
+    public Result<OrderVO> detail(@PathVariable Long id) {
+        return Result.ok(orderQueryService.getOrderDetail(id));
+    }
+}
+```
+
+对在哪：Controller 的依赖面收敛到 Service 接口，事务、缓存、规则校验在 Service 内统一生效；换协议（HTTP 改 RPC、加消息入口）业务层零改动。
+
+**判定问句**：Controller 的构造器里，有没有 Service 以外的业务组件？有持久层组件 → 立即改道 Service。
+
+### 边界情况
+
+- **接入层自身设施不算越界**：`HttpServletRequest`、`@Valid` / `@Validated` 触发的 Bean Validation、MVC 类型转换、接口文档注解——这些是协议适配的原材料，不是业务依赖。
+- **Service 以外的灰色组件按「是否触达数据与业务」判定**（与命名豁免的落点思想一致）：只做协议适配的（如统一返回体包装器、常量）接入层可用；触达数据与业务的（缓存客户端、MQ 模板、搜索引擎客户端）与持久层组件同等对待，一律下沉 Service。禁令不靠穷举组件清单——清单永远写不全，判据是它碰不碰数据与业务。
+
+---
+
+## 规则二：职责边界——Controller 不写业务逻辑
+
+Controller 只做三件事：**接参数**（接收请求并触发参数格式校验）、**调 Service**（调用业务层）、**组返回**（包装统一响应体、表达 HTTP 语义与状态码）。业务规则判断、金额计算、复杂数据组装一律写在 Service。
+
+### 反例
+
+```java
+// ❌ Controller 干起了 Service 的活
+@PostMapping("/orders")
+public Result<OrderVO> create(@RequestBody @Valid OrderCreateCmd cmd) {
+    if (cmd.getQuantity() > stockService.getStock(cmd.getSkuId())) {      // 业务规则判断
+        throw new BizException("库存不足");
+    }
+    BigDecimal payable = cmd.getPrice()
+            .multiply(BigDecimal.valueOf(cmd.getQuantity()))              // 金额计算
+            .subtract(couponService.calcDiscount(cmd));
+    Order order = orderConvert.toOrder(cmd, payable);                     // 复杂组装
+    orderMapper.insert(order);                                            // 连带出依赖违例
+    return Result.ok(orderConvert.toVO(order));
+}
+```
+
+错在哪：库存判断与金额计算是业务规则，写死在 HTTP 入口——同一个逻辑到了 RPC、定时任务入口就要再抄一遍；Controller 从「协议适配层」膨胀成「另一个 Service」，单测必须起 Web 环境才能跑。
+
+### 正例
+
+```java
+// ✅ 业务全部下沉，Controller 保持三步
+@PostMapping("/orders")
+public Result<OrderVO> create(@RequestBody @Valid OrderCreateCmd cmd) {
+    return Result.ok(orderCreateService.createOrder(cmd));
+}
+```
+
+对在哪：库存判断、金额计算、组装落库都在 `createOrder` 的同一个事务边界内完成；Controller 薄到任何协议都能直接复用 Service；Service 单测不起 Web 容器。
+
+**判定问句**：Controller 方法体里除了「接参数、调 Service、包返回」，还剩什么？剩了任何业务判断或计算，就是越界。
+
+### 边界情况
+
+- **参数校验分两层**：格式与范围校验（非空、长度、区间、格式）在入口层用 Bean Validation 完成——手册亦要求入口层完成参数合法性校验；业务规则校验（库存够不够、用户有没有资格）归 Service。判据：换个协议调用，这条规则还成立吗？成立 → Service。
+- **DTO→VO 的展示转换**：允许 Controller 调用 Converter 组件做纯字段映射；一旦转换里出现业务计算（按身份过滤字段、拼权限标记），下沉 Service。
+- **不算业务逻辑的接入层职责**：统一返回体包装、全局异常处理（`@RestControllerAdvice`）、访问日志与链路埋点、HTTP 状态码表达。
