@@ -20,8 +20,10 @@ Controller 只能引入 **Service 层组件**（业务逻辑的唯一入口）�
 // ❌ Controller 直连持久层——分层被打穿
 @RestController
 public class OrderController {
-    private final OrderMapper orderMapper;      // 禁止：持久层组件
-    private final JdbcTemplate jdbcTemplate;    // 禁止：裸 SQL 直查
+    @Resource
+    private OrderMapper orderMapper;      // 禁止：持久层组件
+    @Resource
+    private JdbcTemplate jdbcTemplate;    // 禁止：裸 SQL 直查
 
     @GetMapping("/orders/{id}")
     public Result<OrderVO> detail(@PathVariable Long id) {
@@ -43,7 +45,8 @@ public class OrderController {
 // ✅ 只引入 Service，数据访问一律经业务层
 @RestController
 public class OrderController {
-    private final OrderQueryService orderQueryService;
+    @Resource
+    private OrderQueryService orderQueryService;
 
     @GetMapping("/orders/{id}")
     public Result<OrderVO> detail(@PathVariable Long id) {
@@ -54,7 +57,7 @@ public class OrderController {
 
 对在哪：Controller 的依赖面收敛到 Service 接口，事务、缓存、规则校验在 Service 内统一生效；换协议（HTTP 改 RPC、加消息入口）业务层零改动。
 
-**判定问句**：Controller 的构造器里，有没有 Service 以外的业务组件？有持久层组件 → 立即改道 Service。
+**判定问句**：Controller 的依赖字段里，有没有 Service 以外的业务组件？有持久层组件 → 立即改道 Service。
 
 ### 边界情况
 

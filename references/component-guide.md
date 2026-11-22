@@ -37,7 +37,8 @@ public class PhoneValidator {
 
 @Service
 public class OrderService {
-    private final PhoneValidator phoneValidator;   // 构造注入
+    @Resource
+    private PhoneValidator phoneValidator;   // 字段注入（见 springboot-guide.md）
     // ... 使用 phoneValidator.isValid(...)
 }
 ```
