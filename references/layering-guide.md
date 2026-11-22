@@ -2,6 +2,8 @@
 
 「分层」约束回答的不是「组件怎么写」（那是组件规范的职责），而是「组件放在哪一层、允许依赖谁」。当前展开 Controller 层两条；Service/DAO 层条款按需扩展。
 
+Maven 多模块 DDD 工程（domain / infrastructure / service / web / bootstrap / common 六模块）的完整分层规范见 [ddd-layering-guide.md](ddd-layering-guide.md)——本篇 Controller 两条是 DDD「适配层不碰基础设施」在单模块工程的表达，两条同源，冲突时按 SKILL.md 裁决链以更严格者为准。
+
 分层依赖方向固定为单向，禁止回环、禁止跨层：
 
 ```
