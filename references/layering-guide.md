@@ -1,8 +1,8 @@
 # 分层规范详述 · Controller 层
 
-「分层」约束回答的不是「组件怎么写」（那是组件规范的职责），而是「组件放在哪一层、允许依赖谁」。当前展开 Controller 层两条；Service/DAO 层条款按需扩展。
+「分层」约束回答的不是「组件怎么写」（那是组件规范的职责），而是「组件放在哪一层、允许依赖谁」，以及接入层对外的协议契约。当前展开 Controller 层三条；Service/DAO 层条款按需扩展。
 
-Maven 多模块 DDD 工程（domain / infrastructure / service / web / bootstrap / common 六模块）的完整分层规范见 [ddd-layering-guide.md](ddd-layering-guide.md)——本篇 Controller 两条是 DDD「适配层不碰基础设施」在单模块工程的表达，两条同源，冲突时按 SKILL.md 裁决链以更严格者为准。
+Maven 多模块 DDD 工程（domain / infrastructure / service / web / bootstrap / common 六模块）的完整分层规范见 [ddd-layering-guide.md](ddd-layering-guide.md)——本篇 Controller 条款是 DDD「适配层」规范在单模块工程的表达（依赖/职责两条与 DDD 规则四同源，路径规范对两种架构同样生效），冲突时按 SKILL.md 裁决链以更严格者为准。
 
 分层依赖方向固定为单向，禁止回环、禁止跨层：
 
@@ -27,7 +27,7 @@ public class OrderController {
     @Resource
     private JdbcTemplate jdbcTemplate;    // 禁止：裸 SQL 直查
 
-    @GetMapping("/orders/{id}")
+    @GetMapping("/api/v1/orders/{id}")
     public Result<OrderVO> detail(@PathVariable Long id) {
         Order order = orderMapper.selectById(id);   // 绕过 Service 直查库
         ...
@@ -50,7 +50,7 @@ public class OrderController {
     @Resource
     private OrderQueryService orderQueryService;
 
-    @GetMapping("/orders/{id}")
+    @GetMapping("/api/v1/orders/{id}")
     public Result<OrderVO> detail(@PathVariable Long id) {
         return Result.ok(orderQueryService.getOrderDetail(id));
     }
@@ -76,7 +76,7 @@ Controller 只做三件事：**接参数**（入参 >= 2 抽成 Req 对象——
 
 ```java
 // ❌ Controller 干起了 Service 的活
-@PostMapping("/orders")
+@PostMapping("/api/v1/orders")
 public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
     if (req.getQuantity() > stockService.getStock(req.getSkuId())) {      // 业务规则判断
         throw new BizException("库存不足");
@@ -96,7 +96,7 @@ public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
 
 ```java
 // ✅ 业务全部下沉，Controller 保持三步
-@PostMapping("/orders")
+@PostMapping("/api/v1/orders")
 public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
     return Result.ok(orderCreateService.createOrder(req));
 }
@@ -111,3 +111,50 @@ public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
 - **参数校验分两层**：格式与范围校验（非空、长度、区间、格式）在入口层用 Bean Validation 完成——手册亦要求入口层完成参数合法性校验；业务规则校验（库存够不够、用户有没有资格）归 Service。判据：换个协议调用，这条规则还成立吗？成立 → Service。
 - **DTO→VO 的展示转换也不在 Controller 做**：转换（DO/DTO→VO）属于数据组装，一律归 Service 层——Service 返回现成的 VO，Controller 拿到即包装统一响应体；Converter 组件由 Service 调用。Controller 不触碰 VO 的字段结构，转换中出现业务计算（按身份过滤字段、拼权限标记）更是早已越界——那是 Service 的业务逻辑。
 - **不算业务逻辑的接入层职责**：统一返回体包装、全局异常处理（`@RestControllerAdvice`）、访问日志与链路埋点、HTTP 状态码表达。
+
+---
+
+## 规则三：接口路径规范——api/v1/xxx 必带版本号
+
+Controller 的接口路径必须遵循 **`api/v1/xxx` 格式**：`api` 前缀 + **版本号**（v1、v2…）+ 资源路径。版本号是接口契约的一部分——演进靠版本号，不靠破坏性改路径。类级 `@RequestMapping("/api/v1/orders")` 统一前缀与方法级全路径两种写法等价，团队统一其一即可。
+
+### 反例
+
+```java
+// ❌ 三种不合规写法
+@GetMapping("/orders/{id}")        // 无版本号
+@GetMapping("/api/orders/{id}")    // 有前缀无版本
+@GetMapping("/v1/orders/{id}")     // 有版本无 api 前缀
+```
+
+错在哪：路径没有版本护栏——后续字段增删、语义变更只能原地改路径，所有调用方（前端、网关、第三方）跟着断；缺 `api` 前缀则业务路径与框架自带路径（actuator、静态资源）混在同一命名空间。
+
+### 正例
+
+```java
+// ✅ 类级统一前缀 + 方法级相对路径（推荐写法）
+@RestController
+@RequestMapping("/api/v1/orders")
+public class OrderController {
+    @GetMapping("/{id}")
+    public Result<OrderVO> detail(@Valid OrderQueryReq req) { ... }
+
+    @PostMapping
+    public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) { ... }
+}
+
+// ✅ 方法级全路径（等价合规）
+@GetMapping("/api/v1/orders/{id}")
+public Result<OrderVO> detail(@Valid OrderQueryReq req) { ... }
+```
+
+对在哪：`/api/v1/orders/{id}` 一眼读出「API、第一版、订单资源」；演进 v2 时 `/api/v2/...` 并行上线、v1 保留兼容；调用方看到的地址契约稳定。
+
+**判定问句**：路径是 `api/v1/xxx` 格式吗？版本号带了吗？不满足 → 补齐再落笔。
+
+### 边界情况
+
+- **版本升级**：破坏性变更建 v2 新路径，v1 保留兼容（或按项目下线策略），禁止原地改 v1 的语义；
+- **框架自带路径豁免**：actuator、swagger UI、error 页等框架/中间件自有路径不受此约束；
+- **项目另有约定优先**：按裁决链第 1 条，项目若统一 `/xxx/v1`、header 版本等自有约定，以项目规范为准；
+- 与入参对象化互补：路径版本化管**地址契约**，Req 对象管**载荷契约**，两者共同构成 Controller 的对外接口。

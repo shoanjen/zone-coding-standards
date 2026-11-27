@@ -166,13 +166,13 @@ public class CouponAppService {
 
 ## 规则四：适配层不碰基础设施——Controller 三件事
 
-与 [layering-guide.md](layering-guide.md) 的 Controller 两条完全同源：Controller 只能注入应用服务，只做接参数（含 @Valid 校验触发）、调应用服务、组返回（统一响应体）；不写业务、不做 DTO→VO 转换、不注入任何持久层与基础设施组件。
+与 [layering-guide.md](layering-guide.md) 的 Controller 规范完全同源：Controller 只能注入应用服务，只做接参数（入参 >= 2 抽 Req 对象，含 @Valid 校验触发）、调应用服务、组返回（统一响应体）；不写业务、不做 DTO→VO 转换、不注入任何持久层与基础设施组件；接口路径同受 `api/v1/xxx` 版本化约束。
 
 ### 反例 / 正例速记
 
 ```java
 // ❌ 注入 Mapper + 手搓转换 + 写业务
-@GetMapping("/orders/{id}")
+@GetMapping("/api/v1/orders/{id}")
 public Result<OrderDetailRes> detail(@PathVariable Long id) {
     OrderDO orderDO = orderMapper.selectById(id);          // 直触基础设施
     if (orderDO.getStatus() == 2) throw new BizException("已取消");   // 业务规则
@@ -181,7 +181,7 @@ public Result<OrderDetailRes> detail(@PathVariable Long id) {
 }
 
 // ✅ 三件事收口
-@GetMapping("/orders/{id}")
+@GetMapping("/api/v1/orders/{id}")
 public Result<OrderDetailRes> detail(@Valid OrderQueryReq req) {
     return Result.ok(orderQueryAppService.detail(req));   // Res 由应用层 Assembler 装配
 }

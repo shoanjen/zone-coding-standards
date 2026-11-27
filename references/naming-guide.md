@@ -335,7 +335,7 @@ public void onOrderPaid(Order order) { ... }         // 订单已付回调
 
 ```java
 // ❌ 平铺散参——调用点读不出语义，加参数要改所有调用方
-@PostMapping("/orders")
+@PostMapping("/api/v1/orders")
 public Result<OrderVO> create(@RequestParam Long skuId,
                               @RequestParam Integer quantity,
                               @RequestParam String couponCode) { ... }   // Controller 平铺
@@ -351,7 +351,7 @@ private void markRead(List<Long> msgIds, Long userId, boolean all) { ... }      
 
 ```java
 // ✅ Controller：Req 对象接收，字段即契约
-@PostMapping("/orders")
+@PostMapping("/api/v1/orders")
 public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
     return Result.ok(orderCreateService.createOrder(req));
 }
