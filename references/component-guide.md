@@ -154,15 +154,17 @@ public RefundResult refund(RefundRequest request) {
     // ……100 行结果组装与落库……
 }
 
-// ✅ 主方法只留骨架，中间逻辑抽成 private
+// ✅ 主方法只留骨架，中间逻辑抽成 private（各方法入参均 ≤1，符合入参对象化）
 public RefundResult refund(RefundRequest request) {
     validateRefundable(request);
-    BigDecimal refundAmount = calcRefundAmount(request);
-    return assembleRefundResult(request, refundAmount);
+    return assembleRefundResult(request);
 }
 private void validateRefundable(RefundRequest request) { ... }
 private BigDecimal calcRefundAmount(RefundRequest request) { ... }
-private RefundResult assembleRefundResult(RefundRequest request, BigDecimal refundAmount) { ... }
+private RefundResult assembleRefundResult(RefundRequest request) {
+    BigDecimal refundAmount = calcRefundAmount(request);   // 步骤内调用计算
+    // ……组装与落库……
+}
 ```
 
 错在哪：裸 300 行读不动、测不了；抽出的中间方法若设为 public，会变成绕过主流程的「后门」调用路径。

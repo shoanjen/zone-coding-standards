@@ -1,6 +1,6 @@
 ---
 name: zone-coding-standards
-description: Java 编码规范基线：AI 执行任何 Java 编码任务（编写、修改、重构、评审、解释 Java 代码，设计 Java 类/组件/服务）时默认装载遵守，无需用户点名。规范裁决链固定为「项目自身规范 > 阿里巴巴 Java 开发手册 > 本 skill 自定义规则」，自定义规则含命名规范五条、组件规范四条、分层规范（单模块 Controller 层两条 + DDD 多模块工程六条：领域框架无关/依赖方向/依赖倒置/对象归位/装配根/ArchUnit 守护）与 Spring Boot 工程惯例（Lombok 优先、字段注入为主），每条规则展开必带正反例与判定问句；表述业务领域中立，示例 Java 为主、必要处含 Spring Boot 写法。触发时机：用户要求实现/修改/重构/评审 Java 代码、解决命名、组件设计、分层放置、模块划分或工程惯例问题，或在 DDD 多模块工程中新建/迁移模块与代码时，或 AI 自检 Java 代码质量；落笔前装载，而非评审时才补救。
+description: Java 编码规范基线：AI 执行任何 Java 编码任务（编写、修改、重构、评审、解释 Java 代码，设计 Java 类/组件/服务）时默认装载遵守，无需用户点名。规范裁决链固定为「项目自身规范 > 阿里巴巴 Java 开发手册 > 本 skill 自定义规则」，自定义规则含命名规范五条、方法入参对象化（参数 >=2 禁止平铺，抽 Req/语义对象）、组件规范四条、分层规范（单模块 Controller 层两条 + DDD 多模块工程六条：领域框架无关/依赖方向/依赖倒置/对象归位/装配根/ArchUnit 守护）与 Spring Boot 工程惯例（Lombok 优先、字段注入为主、事务编程式禁 @Transactional），每条规则展开必带正反例与判定问句；表述业务领域中立，示例 Java 为主、必要处含 Spring Boot 写法。触发时机：用户要求实现/修改/重构/评审 Java 代码、解决命名、方法签名、组件设计、分层放置、模块划分、事务写法或工程惯例问题，或在 DDD 多模块工程中新建/迁移模块与代码时，或 AI 自检 Java 代码质量；落笔前装载，而非评审时才补救。
 ---
 
 # Java 编码规范基线
@@ -11,7 +11,7 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
 
 1. **项目自身规范**（若有）：团队规范、项目 README 中的约定，最优先。
 2. **阿里巴巴 Java 开发手册**：Java 项目直接适用；【强制】条款速查见 [references/alibaba-core.md](references/alibaba-core.md)。
-3. **本 skill 自定义规则**：命名规范五条 + 组件规范四条 + 分层规范（单模块 Controller 两条 / DDD 多模块六条），补手册未覆盖或需强化处。
+3. **本 skill 自定义规则**：命名规范五条 + 方法入参对象化 + 组件规范四条 + 分层规范（单模块 Controller 两条 / DDD 多模块六条）+ Spring Boot 工程惯例三条，补手册未覆盖或需强化处。
 4. 条款冲突取**更严格**者；裁决不了问用户。
 
 ## 硬约束
@@ -41,6 +41,15 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
    ❌ 分页单页数据叫 `orderList` ✅ `orderPage`；❌ `long count = order.getTotalAmount()` ✅ `payableAmount`
    判定问句：变量的名字和它此刻装的东西，是同一件事吗？
 
+## 方法入参规范（一条）
+
+详述与边界情况见 [references/naming-guide.md](references/naming-guide.md)「入参对象化」小节。
+
+1. **入参对象化**：**所有方法**请求参数 **>= 2 个**时禁止平铺，必须抽成单一对象——Controller 层抽 Req 对象（XxxReq），其他层抽语义对应的对象（查询→XxxQuery、命令→XxxCmd）；private 中间方法一视同仁。
+   ❌ `refund(Long orderId, BigDecimal amount, String reason)`（散参调用点读不出语义） ✅ `refund(RefundCmd cmd)`；✅ Controller `create(@RequestBody @Valid OrderCreateReq req)`
+   判定问句：方法入参 >= 2 个了吗？是 → 先抽对象再落笔。
+   > 构造器（多字段是不变式本义）与框架契约方法（覆写的 doFilter 等）不受此条约束，见详述边界情况。
+
 ## 组件规范四条（类、Service、方法等可复用封装单元）
 
 详述与 Spring Boot 写法见 [references/component-guide.md](references/component-guide.md)。
@@ -67,8 +76,8 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
 1. **依赖边界**：Controller 只能引入 Service 业务层组件；禁止引入持久层组件（DAO/Repository/Mapper 等），触达数据与业务的基础设施同理下沉。
    ❌ Controller 直注 `OrderMapper` 绕过 Service 查库 ✅ 只注入 `OrderQueryService`
    判定问句：Controller 的依赖字段里，有没有 Service 以外的业务组件？
-2. **职责边界**：Controller 不写业务逻辑、不做对象转换（DTO→VO 归 Service，Service 直接返回 VO），只做三件事——接参数（含触发参数校验）、调 Service、组返回（统一响应体 + HTTP 语义）。
-   ❌ 在 Controller 里判库存、算金额、调 Converter 转 VO ✅ `Result.ok(orderCreateService.createOrder(cmd))`（Service 直接给 VO）
+2. **职责边界**：Controller 不写业务逻辑、不做对象转换（DTO→VO 归 Service，Service 直接返回 VO），只做三件事——接参数（入参 >= 2 抽成 Req 对象 + 触发参数校验）、调 Service、组返回（统一响应体 + HTTP 语义）。
+   ❌ 在 Controller 里判库存、算金额、调 Converter 转 VO ✅ `Result.ok(orderCreateService.createOrder(req))`（Service 直接给 VO）
    判定问句：Controller 里除了接参数、调 Service、包返回，还剩什么？剩了就越界。
 
 ## 分层规范 · DDD 多模块工程（六条）
@@ -96,7 +105,7 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
    ❌ 分层靠 review 口头把关 ✅ 六条规则测试化，构建即拦截
    判定问句：这条分层约定，机器在 `mvn test` 里能拦住吗？不能 → 补规则。
 
-## Spring Boot 工程惯例（两条）
+## Spring Boot 工程惯例（三条）
 
 详述与坑见 [references/springboot-guide.md](references/springboot-guide.md)。
 
@@ -107,8 +116,11 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
    ❌ `private final OrderQueryService service;` + 构造器参数 ✅ `@Resource private OrderQueryService service;`
    判定问句：这个 Bean 的依赖是构造器塞进来的吗？是 → 改字段注入。
    > 例外按裁决链：DDD 多模块工程若项目自身约定 `@RequiredArgsConstructor`（Lombok）+ `private final` 构造器注入（不可变依赖），以项目规范为准（见 [references/ddd-layering-guide.md](references/ddd-layering-guide.md) 工程惯例补充）。
+3. **事务编程式**：Spring 事务**禁止 `@Transactional` 注解**，一律 `TransactionTemplate.execute` 在方法体内声明边界，只包真正需要原子性的片段。
+   ❌ `@Transactional public void createOrder(...)`（同类自调用静默失效） ✅ `transactionTemplate.execute(status -> { ... })`
+   判定问句：事务边界是注解声明的吗？是 → 改 TransactionTemplate。
 
 ## 编码自检
 
-- **落笔前**：命名过五条；新写组件先想职责边界；接入层代码先想分层边界（只依赖 Service、不写业务）；**DDD 多模块工程先对六条**（领域纯净、依赖方向、依赖倒置、对象归位、装配根、测试守护），新模块/新类先确认落点层。
-- **交付前**：组件过四条、Controller 过两条、DDD 工程六条、工程惯例过两条（样板换注解、依赖字段注入或项目约定的构造器注入）；再对照手册【强制】条款速查（[references/alibaba-core.md](references/alibaba-core.md)）扫一遍。
+- **落笔前**：命名过五条；**方法签名先过入参对象化**（>= 2 抽对象）；新写组件先想职责边界；接入层代码先想分层边界（只依赖 Service、不写业务）；**DDD 多模块工程先对六条**（领域纯净、依赖方向、依赖倒置、对象归位、装配根、测试守护），新模块/新类先确认落点层。
+- **交付前**：组件过四条、Controller 过两条、DDD 工程六条、工程惯例过三条（样板换注解、依赖字段注入或项目约定的构造器注入、事务编程式）；再对照手册【强制】条款速查（[references/alibaba-core.md](references/alibaba-core.md)）扫一遍。

@@ -149,8 +149,7 @@ public class RuleGatewayImpl implements RuleGateway { ... }   // infrastructure�
 
 public class CouponAppService {
     @Resource private RuleGateway ruleGateway;
-    @Transactional(readOnly = true)
-    public CouponRes calc(CouponCalcReq req) { ... }
+    public CouponRes calc(CouponCalcReq req) { ... }   // 读路径无需显式事务
 }
 ```
 
@@ -160,7 +159,7 @@ public class CouponAppService {
 
 ### 边界情况
 
-- `@Transactional`、`@Service` 等 Spring 注解在应用层**允许**（事务边界归应用层，这是用例编排的一部分）；「框架无关」约束的是领域层，不是应用层；
+- `@Service` 等 Spring 组件注解在应用层**允许**（「框架无关」约束的是领域层，不是应用层）；但**事务实现禁止 `@Transactional` 注解**——事务边界归应用层，写法必须编程式 `TransactionTemplate`（见 [springboot-guide.md](springboot-guide.md) 规则三）；
 - 应用层的日志门面、统一异常允许使用（横切能力），但中间件能力包（HTTP 客户端/Redis/数据源）禁止——判据：它是不是「实现细节的入口」。
 
 ---
@@ -269,5 +268,6 @@ void 领域层应为框架无关纯领域层() {
 ## 工程惯例补充
 
 - **依赖注入风格**：DDD 多模块工程惯例统一 `@RequiredArgsConstructor`（Lombok）+ `private final` 不可变字段注入；与单体工程的字段注入惯例并存时，**按裁决链以项目自身规范优先**。
+- **事务写法**：应用服务的事务边界禁止 `@Transactional` 注解，一律 `TransactionTemplate` 编程式（见 [springboot-guide.md](springboot-guide.md) 规则三），无工程差异例外。
 - **新业务开发动线**（照此填代码即合规）：domain 建实体/接口 → infrastructure 建 DO/Mapper/Converter 并实现接口 → service 写应用服务（事务在此）+ Req/Res/Assembler → web 写 Controller 三件事。
 - **JSON/异常/返回体**等编码约定随项目脚手架走：统一返回体、业务异常、请求基类继承均以项目规范优先（见 SKILL.md 裁决链第 1 条）。

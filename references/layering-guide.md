@@ -70,21 +70,21 @@ public class OrderController {
 
 ## 规则二：职责边界——Controller 不写业务逻辑
 
-Controller 只做三件事：**接参数**（接收请求并触发参数格式校验）、**调 Service**（调用业务层）、**组返回**（包装统一响应体、表达 HTTP 语义与状态码）。业务规则判断、金额计算、复杂数据组装一律写在 Service。
+Controller 只做三件事：**接参数**（入参 >= 2 抽成 Req 对象——XxxReq，含触发参数格式校验，见 naming-guide「入参对象化」）、**调 Service**（调用业务层）、**组返回**（包装统一响应体、表达 HTTP 语义与状态码）。业务规则判断、金额计算、复杂数据组装一律写在 Service。
 
 ### 反例
 
 ```java
 // ❌ Controller 干起了 Service 的活
 @PostMapping("/orders")
-public Result<OrderVO> create(@RequestBody @Valid OrderCreateCmd cmd) {
-    if (cmd.getQuantity() > stockService.getStock(cmd.getSkuId())) {      // 业务规则判断
+public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
+    if (req.getQuantity() > stockService.getStock(req.getSkuId())) {      // 业务规则判断
         throw new BizException("库存不足");
     }
-    BigDecimal payable = cmd.getPrice()
-            .multiply(BigDecimal.valueOf(cmd.getQuantity()))              // 金额计算
-            .subtract(couponService.calcDiscount(cmd));
-    Order order = orderConvert.toOrder(cmd, payable);                     // 复杂组装
+    BigDecimal payable = req.getPrice()
+            .multiply(BigDecimal.valueOf(req.getQuantity()))              // 金额计算
+            .subtract(couponService.calcDiscount(req));
+    Order order = orderConvert.toOrder(req, payable);                     // 复杂组装
     orderMapper.insert(order);                                            // 连带出依赖违例
     return Result.ok(orderConvert.toVO(order));
 }
@@ -97,8 +97,8 @@ public Result<OrderVO> create(@RequestBody @Valid OrderCreateCmd cmd) {
 ```java
 // ✅ 业务全部下沉，Controller 保持三步
 @PostMapping("/orders")
-public Result<OrderVO> create(@RequestBody @Valid OrderCreateCmd cmd) {
-    return Result.ok(orderCreateService.createOrder(cmd));
+public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
+    return Result.ok(orderCreateService.createOrder(req));
 }
 ```
 

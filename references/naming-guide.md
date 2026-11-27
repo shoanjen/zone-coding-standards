@@ -303,6 +303,7 @@ class RefundMessageHandler { ... }      // 退款消息处理器（角色原型�
 3. 事件回调用 `on + 事件名`：`onOrderPaid`、`onRefundCompleted`。
 4. 同一动作全系统同一动词（规则三在方法维度的落点）：别一处 `check`、一处 `validate`、一处 `verify` 指同一件事。
 5. 通用动词豁免见规则二「语义落点原则」：语义有唯一明确落点（契约/框架/负载/领域）的 `process`/`handle` 合法；具体业务实现类里落点含糊的自有方法不合法。
+6. **入参对象化**——请求参数 >= 2 个禁止平铺，抽成单一对象（Controller→XxxReq，其他层→语义对象）；展开见下方「入参对象化」小节。
 
 ```java
 // ❌
@@ -325,6 +326,52 @@ public void onOrderPaid(Order order) { ... }         // 订单已付回调
 
 - 测试方法允许描述式长名（`refundShouldFailWhenBalanceInsufficient`），因为它本身就是断言描述。
 - 重载的同名方法靠参数区分语义，不算多义词（如 `createOrder(OrderCmd)` 与 `createOrder(Cart)`）。
+
+### 入参对象化（参数结构）
+
+**所有方法**的请求参数 **>= 2 个**时，禁止平铺所有参数，必须抽成单一对象：**Controller 层抽 Req 对象**（XxxReq，GET 经参数绑定、写请求经 @RequestBody 接收），**其他层抽语义对应的对象**（查询→XxxQuery、命令→XxxCmd、导出→XxxExportQuery 等），对象字段命名按变量细则。private 中间方法一视同仁。
+
+#### 反例
+
+```java
+// ❌ 平铺散参——调用点读不出语义，加参数要改所有调用方
+@PostMapping("/orders")
+public Result<OrderVO> create(@RequestParam Long skuId,
+                              @RequestParam Integer quantity,
+                              @RequestParam String couponCode) { ... }   // Controller 平铺
+
+public RefundResult refund(Long orderId, BigDecimal amount, String reason) { ... }  // Service 平铺
+
+private void markRead(List<Long> msgIds, Long userId, boolean all) { ... }          // 内部方法同样平铺
+```
+
+错在哪：调用点 `create(1001L, 2, "NEW5")` 读不出每个散参是什么；新增一个参数（如渠道来源）要改动所有调用方签名；参数顺序错位是隐性 bug 温床。
+
+#### 正例
+
+```java
+// ✅ Controller：Req 对象接收，字段即契约
+@PostMapping("/orders")
+public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
+    return Result.ok(orderCreateService.createOrder(req));
+}
+
+// ✅ 其他层：语义对应的对象
+public RefundResult refund(RefundCmd cmd) { ... }                      // 命令 → Cmd
+public List<CommentVO> listHotComments(CommentQuery query) { ... }     // 查询 → Query
+private void markRead(MarkReadCmd cmd) { ... }                         // 内部方法同样抽对象
+```
+
+对在哪：调用点 `refund(cmd)` 一个名字说清意图；新增字段只动对象内部，调用方零改动；参数错位在类型层面消失；对象字段名即文档。
+
+**判定问句**：方法入参 >= 2 个了吗？是 → 先抽对象再落笔。
+
+#### 边界情况
+
+- **构造器不受此条约束**：构造器的多字段参数是对象不变式的本义（领域实体构造器、全参构造），对象本身就是参数聚合，不存在「再抽一个对象」；
+- **框架契约方法不受控**：覆写的框架方法（如 `doFilter(req, resp, chain)`）与调用的库 API 签名不归我们定，按规则二「框架落点」豁免；
+- **单参数不抽**：1 个参数天然已是对象或语义完整，不为形式强拆；
+- Req 对象是参数校验的载体：@NotBlank 等校验注解放对象字段上，@Valid 触发——呼应手册「入口层完成参数合法性校验」。
 
 ## 变量命名（字段、局部变量、常量、参数）
 
@@ -356,7 +403,7 @@ List<Order> refundableOrders = ...;
 
 ### 边界情况
 
-- 方法参数名同样按变量细则执行；接口契约参数名是文档的一部分（`refund(long orderId, BigDecimal amountCent)` 优于 `refund(long a, BigDecimal b)`）。
+- 方法参数名同样按变量细则执行；入参抽成对象后（见上方「入参对象化」），**对象字段名承担契约文档职责**——`RefundCmd` 的 `orderId`、`amountCent` 字段优于单字母字段；单参数方法的参数名按变量细则。
 - 循环变量、临时交换变量等语言惯例外已在规则二边界排除，不重复约束。
 
 ---
@@ -375,3 +422,4 @@ AI 生成的 Java 代码高频出现以下命名问题，编码自检时优先�
 | 复制后不改名 | 复制 A 方法改名 `newMethod` | 按新职责重命名（规则一） |
 | 拼音/拼音缩写 | `yhMc`、`dingDanList` | 英文写全（规则四，手册【强制】） |
 | 语义分级错误 | `getUser` 实际可能返回 null | `findXxx` + `Optional` 表达可能无（方法命名） |
+| 平铺散参 | `refund(orderId, amount, reason)` 散参调用点 | 抽成 Req/Cmd/Query 单对象（入参对象化） |

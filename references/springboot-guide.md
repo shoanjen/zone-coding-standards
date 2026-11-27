@@ -1,6 +1,6 @@
-# Spring Boot 工程惯例详述（Lombok 与依赖注入）
+# Spring Boot 工程惯例详述（Lombok、依赖注入与事务）
 
-两条本 skill 自定义的工程惯例：一条砍样板代码，一条定注入风格。手册对这两项没有强制条款，按裁决链本规范即为约定。示例 Java + Spring Boot，跨电商、内容、支付、工具等多个业务场景。
+三条本 skill 自定义的工程惯例：一条砍样板代码，一条定注入风格，一条定事务写法。手册对这些没有强制条款，按裁决链本规范即为约定。示例 Java + Spring Boot，跨电商、内容、支付、工具等多个业务场景。
 
 ---
 
@@ -146,3 +146,62 @@ private PayChannelStrategy payChannelStrategy;
 - **不可变性技术要求**：字段必须 `final` 的场景（如持有不可变配置的 key 生成器），按技术需求走构造器。
 - **框架自身的配置类**：遵循框架既有惯例，不强行改造。
 - **单元测试**：字段注入的类用 `@InjectMocks` 照常注入 mock；非 Spring 场景直接 `new` 被测对象再赋值。
+
+---
+
+## 规则三：编程式事务——禁止 @Transactional 注解
+
+Spring 事务**禁止使用 `@Transactional` 注解**（声明式），一律使用**编程式事务**：注入 `TransactionTemplate`，在方法体内用 `execute` 包裹真正需要原子性的片段；需要定制传播行为时构造 Template 时显式声明。
+
+### 反例
+
+```java
+// ❌ 注解声明事务——边界靠猜，失效场景多
+@Service
+public class OrderCreateService {
+
+    @Transactional                    // 生效条件藏在注解里：代理？可见性？回滚规则？
+    public OrderVO createOrder(OrderCreateReq req) {
+        ...
+    }
+
+    public void reprocess() {
+        createOrder(req);             // 同类内部自调用——@Transactional 静默失效，事务根本没开
+    }
+}
+```
+
+错在哪：注解事务的生效依赖 AOP 代理——同类内部自调用静默失效、默认只回滚 unchecked 异常、要求 public 可见性、传播行为默认值易理解偏差，这些坑都不在代码字面上；「声明在方法头上」的边界与实际执行路径脱节，事务没开或范围不对时极难排查。
+
+### 正例
+
+```java
+// ✅ 编程式事务：边界写在调用现场，一眼可见
+@Slf4j
+@Service
+public class OrderCreateService {
+    @Resource
+    private TransactionTemplate transactionTemplate;
+
+    public OrderVO createOrder(OrderCreateReq req) {
+        Order order = transactionTemplate.execute(status -> {   // 事务边界就是这一行
+            Order o = assembleOrder(req);
+            orderRepository.save(o);
+            stockDeductionService.deduct(o.getSkuId(), o.getQuantity());  // 同一事务内原子完成
+            return o;
+        });
+        return toVO(order);
+    }
+}
+```
+
+对在哪：边界在调用现场显式可见；自调用无所谓（没有代理参与）；只包真正需要原子性的写库片段，RPC/HTTP 调用天然在事务外（长事务不占连接）；异常回滚由模板统一处理，不依赖「默认回滚规则」的记忆。
+
+**判定问句**：事务边界是 `@Transactional` 注解声明的吗？是 → 改 `TransactionTemplate.execute`。
+
+### 边界情况
+
+- **只读查询**不需要显式事务；确需时在定制的 Template 上设 `readOnly`，不为查询强行包事务；
+- **手动 PlatformTransactionManager**（getTransaction / commit / rollback / finally 回滚）也算编程式，但优先 `TransactionTemplate`——模板统一处理异常回滚，少写样板；
+- **事务范围最小化**是本条的隐性收益：只包写库片段，外部 HTTP 调用、消息发送不进事务边界；
+- 本条为团队约定（手册未禁止注解事务），按裁决链生效；DDD 多模块工程的应用服务同样适用——事务边界归应用层，实现用编程式（见 ddd-layering-guide.md 工程惯例补充）。
