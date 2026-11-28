@@ -15,7 +15,7 @@
 | equals/hashCode | 手写 | `@EqualsAndHashCode` |
 | POJO 全套样板 | 四样手写 | `@Data` |
 | 构造器 | 手写重载 | `@AllArgsConstructor` / `@NoArgsConstructor` / `@RequiredArgsConstructor` |
-| 日志对象 | `LoggerFactory.getLogger(...)` 声明 | `@Slf4j` |
+| 日志对象 | `LoggerFactory.getLogger(...)` 声明 | `@Slf4j`（接入中间件二方包时，业务组件改用 `ZoneLog` 门面，见下） |
 | 多参数构建 | 重叠构造器 / 手写 Builder | `@Builder` |
 
 ### 反例
@@ -70,6 +70,8 @@ public class CommentStat {
 ```
 
 对在哪：字段即全部内容——新增字段零样板维护；`@Slf4j` 统一日志门面（呼应手册：禁止 System.out，统一 SLF4J）。
+
+> **接入中间件二方包后的日志写法**：业务组件与应用服务的日志统一走 `ZoneLog.info("类名", "方法名", "消息 {}", args...)` 门面（类名/方法名显式入参，traceId/reqId 自动织入 MDC，链路可串）；`@Slf4j` 保留给不引二方包的场景与纯工具类。两条路都不手写 Logger 声明（详见 [zone-middleware-guide.md](zone-middleware-guide.md) 规则二）。
 
 **判定问句**：这段 getter/setter/toString/logger 是不是手写的？是 → 换注解。
 
@@ -146,6 +148,7 @@ private PayChannelStrategy payChannelStrategy;
 - **不可变性技术要求**：字段必须 `final` 的场景（如持有不可变配置的 key 生成器），按技术需求走构造器。
 - **框架自身的配置类**：遵循框架既有惯例，不强行改造。
 - **单元测试**：字段注入的类用 `@InjectMocks` 照常注入 mock；非 Spring 场景直接 `new` 被测对象再赋值。
+- **DDD 多模块模板工程例外**：注入风格按工程约定统一 `@RequiredArgsConstructor` + `private final`（不可变依赖），以工程惯例为准（见 ddd-layering-guide.md 工程惯例补充）；单体三层工程按本条字段注入。
 
 ---
 
@@ -204,4 +207,6 @@ public class OrderCreateService {
 - **只读查询**不需要显式事务；确需时在定制的 Template 上设 `readOnly`，不为查询强行包事务；
 - **手动 PlatformTransactionManager**（getTransaction / commit / rollback / finally 回滚）也算编程式，但优先 `TransactionTemplate`——模板统一处理异常回滚，少写样板；
 - **事务范围最小化**是本条的隐性收益：只包写库片段，外部 HTTP 调用、消息发送不进事务边界；
+- **领域事件在事务提交后发布**：`eventPublisher.publishEvent(event)` 写在 `transactionTemplate.execute` **返回之后**，不放进事务体内——事务回滚时事件绝不能已经发出去（监听方拿到的是未落库的状态）；
+- **实体守卫异常在应用层翻译**：领域实体不变式守卫抛 `IllegalStateException`（领域层禁引二方包异常，见 ddd-layering-guide.md 规则一），应用服务在事务体内 catch 后翻译为 `ZoneBusinessException(BusinessError.XXX, message)`——领域异常语义在应用层边界翻译，领域层保持纯净；
 - 本条为团队约定（手册未禁止注解事务），按裁决链生效；DDD 多模块工程的应用服务同样适用——事务边界归应用层，实现用编程式（见 ddd-layering-guide.md 工程惯例补充）。

@@ -1,20 +1,24 @@
 # 分层规范详述 · Controller 层
 
-「分层」约束回答的不是「组件怎么写」（那是组件规范的职责），而是「组件放在哪一层、允许依赖谁」，以及接入层对外的协议契约。当前展开 Controller 层三条；Service/DAO 层条款按需扩展。
+「分层」约束回答的不是「组件怎么写」（那是组件规范的职责），而是「组件放在哪一层、允许依赖谁」，以及接入层对外的协议契约。当前展开适配层（Controller）三条；应用层（Service）/基础设施层条款按需扩展。
 
-Maven 多模块 DDD 工程（domain / infrastructure / service / web / bootstrap / common 六模块）的完整分层规范见 [ddd-layering-guide.md](ddd-layering-guide.md)——本篇 Controller 条款是 DDD「适配层」规范在单模块工程的表达（依赖/职责两条与 DDD 规则四同源，路径规范对两种架构同样生效），冲突时按 SKILL.md 裁决链以更严格者为准。
+Maven 多模块 DDD 工程（domain / infrastructure / service / web / bootstrap / common 六模块）的完整分层规范见 [ddd-layering-guide.md](ddd-layering-guide.md)——本篇 Controller 条款是 DDD「适配层」规范在单模块工程的表达（依赖/职责两条与 DDD 规则四同源，路径规范对两种架构同样生效），冲突时按 SKILL.md 裁决链以更严格者为准。示例中的统一返回体与业务异常以中间件二方包为默认基准（`ZoneResult` / `ZoneBusinessException`，详见 [zone-middleware-guide.md](zone-middleware-guide.md)）；项目另有约定按裁决链以项目规范优先。
 
-分层依赖方向固定为单向，禁止回环、禁止跨层：
+分层依赖方向按 DDD 分层表达，固定单向、禁止回环、禁止跨层（与 [ddd-layering-guide.md](ddd-layering-guide.md) 同图同源）：
 
 ```
-Controller（接入层） --> Service（业务层） --> DAO/Repository（持久层） --> 数据库
+Controller/web（适配层） ──► service（应用层） ──► domain（领域层） ◄──── infrastructure（基础设施层）
+                                                        ▲
+                                    bootstrap（装配根：运行期注入实现）
 ```
+
+单体三层工程不分 Maven 模块，角色对应：Controller ≈ 适配层、Service ≈ 应用层、DAO/Repository/Mapper ≈ 基础设施层（实现领域接口，由容器/装配根注入）——依赖箭头依旧朝领域收口：Controller 永远只依赖应用层，DAO/Mapper 不出现在应用层之上，数据库访问被应用层与基础设施层的接口-实现边界隔开。
 
 ---
 
-## 规则一：依赖边界——Controller 只依赖业务层
+## 规则一：依赖边界——Controller 只依赖应用层
 
-Controller 只能引入 **Service 层组件**（业务逻辑的唯一入口）；**禁止引入持久层组件**：DAO、Repository、Mapper、JPA Repository、MyBatis Mapper、JdbcTemplate 等一律不得出现在 Controller 的字段、构造参数与方法体内。
+Controller 只能引入**应用层组件**（Service，业务逻辑的唯一入口）；**禁止引入基础设施层（持久层）组件**：DAO、Repository、Mapper、JPA Repository、MyBatis Mapper、JdbcTemplate 等一律不得出现在 Controller 的字段、构造参数与方法体内。
 
 ### 反例
 
@@ -28,7 +32,7 @@ public class OrderController {
     private JdbcTemplate jdbcTemplate;    // 禁止：裸 SQL 直查
 
     @GetMapping("/api/v1/orders/{id}")
-    public Result<OrderVO> detail(@PathVariable Long id) {
+    public ZoneResult<OrderVO> detail(@PathVariable Long id) {
         Order order = orderMapper.selectById(id);   // 绕过 Service 直查库
         ...
     }
@@ -44,20 +48,20 @@ public class OrderController {
 ### 正例
 
 ```java
-// ✅ 只引入 Service，数据访问一律经业务层
+// ✅ 只引入 Service，数据访问一律经应用层
 @RestController
 public class OrderController {
     @Resource
     private OrderQueryService orderQueryService;
 
     @GetMapping("/api/v1/orders/{id}")
-    public Result<OrderVO> detail(@PathVariable Long id) {
-        return Result.ok(orderQueryService.getOrderDetail(id));
+    public ZoneResult<OrderVO> detail(@PathVariable Long id) {
+        return ZoneResult.ok(orderQueryService.getOrderDetail(id));
     }
 }
 ```
 
-对在哪：Controller 的依赖面收敛到 Service 接口，事务、缓存、规则校验在 Service 内统一生效；换协议（HTTP 改 RPC、加消息入口）业务层零改动。
+对在哪：Controller 的依赖面收敛到 Service 接口，事务、缓存、规则校验在 Service 内统一生效；换协议（HTTP 改 RPC、加消息入口）应用层零改动。
 
 **判定问句**：Controller 的依赖字段里，有没有 Service 以外的业务组件？有持久层组件 → 立即改道 Service。
 
@@ -70,23 +74,23 @@ public class OrderController {
 
 ## 规则二：职责边界——Controller 不写业务逻辑
 
-Controller 只做三件事：**接参数**（入参 >= 2 抽成 Req 对象——XxxReq，含触发参数格式校验，见 naming-guide「入参对象化」）、**调 Service**（调用业务层）、**组返回**（包装统一响应体、表达 HTTP 语义与状态码）。业务规则判断、金额计算、复杂数据组装一律写在 Service。
+Controller 只做三件事：**接参数**（入参 >= 2 抽成 Req 对象——XxxReq，含触发参数格式校验，见 naming-guide「入参对象化」）、**调 Service**（调用应用层）、**组返回**（包装统一响应体、表达 HTTP 语义与状态码）。业务规则判断、金额计算、复杂数据组装一律写在 Service。
 
 ### 反例
 
 ```java
 // ❌ Controller 干起了 Service 的活
 @PostMapping("/api/v1/orders")
-public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
-    if (req.getQuantity() > stockService.getStock(req.getSkuId())) {      // 业务规则判断
-        throw new BizException("库存不足");
-    }
+public ZoneResult<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
+        if (req.getQuantity() > stockService.getStock(req.getSkuId())) {      // 业务规则判断
+            throw new ZoneBusinessException(BusinessError.BUSINESS_FAILED, "库存不足");
+        }
     BigDecimal payable = req.getPrice()
             .multiply(BigDecimal.valueOf(req.getQuantity()))              // 金额计算
             .subtract(couponService.calcDiscount(req));
     Order order = orderConvert.toOrder(req, payable);                     // 复杂组装
     orderMapper.insert(order);                                            // 连带出依赖违例
-    return Result.ok(orderConvert.toVO(order));
+    return ZoneResult.ok(orderConvert.toVO(order));
 }
 ```
 
@@ -97,8 +101,8 @@ public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
 ```java
 // ✅ 业务全部下沉，Controller 保持三步
 @PostMapping("/api/v1/orders")
-public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
-    return Result.ok(orderCreateService.createOrder(req));
+public ZoneResult<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
+    return ZoneResult.ok(orderCreateService.createOrder(req));
 }
 ```
 
@@ -137,15 +141,15 @@ Controller 的接口路径必须遵循 **`api/v1/xxx` 格式**：`api` 前缀 + 
 @RequestMapping("/api/v1/orders")
 public class OrderController {
     @GetMapping("/{id}")
-    public Result<OrderVO> detail(@Valid OrderQueryReq req) { ... }
+    public ZoneResult<OrderVO> detail(@Valid OrderQueryReq req) { ... }
 
     @PostMapping
-    public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) { ... }
+    public ZoneResult<OrderVO> create(@RequestBody @Valid OrderCreateReq req) { ... }
 }
 
 // ✅ 方法级全路径（等价合规）
 @GetMapping("/api/v1/orders/{id}")
-public Result<OrderVO> detail(@Valid OrderQueryReq req) { ... }
+public ZoneResult<OrderVO> detail(@Valid OrderQueryReq req) { ... }
 ```
 
 对在哪：`/api/v1/orders/{id}` 一眼读出「API、第一版、订单资源」；演进 v2 时 `/api/v2/...` 并行上线、v1 保留兼容；调用方看到的地址契约稳定。

@@ -336,7 +336,7 @@ public void onOrderPaid(Order order) { ... }         // 订单已付回调
 ```java
 // ❌ 平铺散参——调用点读不出语义，加参数要改所有调用方
 @PostMapping("/api/v1/orders")
-public Result<OrderVO> create(@RequestParam Long skuId,
+public ZoneResult<OrderVO> create(@RequestParam Long skuId,
                               @RequestParam Integer quantity,
                               @RequestParam String couponCode) { ... }   // Controller 平铺
 
@@ -352,8 +352,8 @@ private void markRead(List<Long> msgIds, Long userId, boolean all) { ... }      
 ```java
 // ✅ Controller：Req 对象接收，字段即契约
 @PostMapping("/api/v1/orders")
-public Result<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
-    return Result.ok(orderCreateService.createOrder(req));
+public ZoneResult<OrderVO> create(@RequestBody @Valid OrderCreateReq req) {
+    return ZoneResult.ok(orderCreateService.createOrder(req));
 }
 
 // ✅ 其他层：语义对应的对象
@@ -371,7 +371,8 @@ private void markRead(MarkReadCmd cmd) { ... }                         // 内部
 - **构造器不受此条约束**：构造器的多字段参数是对象不变式的本义（领域实体构造器、全参构造），对象本身就是参数聚合，不存在「再抽一个对象」；
 - **框架契约方法不受控**：覆写的框架方法（如 `doFilter(req, resp, chain)`）与调用的库 API 签名不归我们定，按规则二「框架落点」豁免；
 - **单参数不抽**：1 个参数天然已是对象或语义完整，不为形式强拆；
-- Req 对象是参数校验的载体：@NotBlank 等校验注解放对象字段上，@Valid 触发——呼应手册「入口层完成参数合法性校验」。
+- Req 对象是参数校验的载体：@NotBlank 等校验注解放对象字段上，@Valid 触发——呼应手册「入口层完成参数合法性校验」；
+- **Req 继承二方包 `BaseRequest`**（reqId/platform/ip 等通用契约字段，中间件二方包基准）时，类上必须补 `@EqualsAndHashCode(callSuper = true)`，否则 equals 不含父类字段（同 Lombok 继承坑，见 springboot-guide.md 规则一）。
 
 ## 变量命名（字段、局部变量、常量、参数）
 

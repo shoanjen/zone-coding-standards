@@ -129,7 +129,7 @@ public List<Order> queryOrders(OrderQuery query) { ... }
 
 对在哪：返回类型即契约；谁需要什么，走独立的显式通道，而不是都挤进一个返回值。
 
-**Spring Boot 统一返回体场景**：`Result<T>` 的 `T` 只装业务数据；统计信息走 AOP/MDC/埋点，不塞进 `T`。业务组件自身返回纯业务对象，包装成 `Result` 是接入层（Controller）的事。
+**Spring Boot 统一返回体场景**：`ZoneResult<T>`（二方包统一返回体）的 `T` 只装业务数据；统计信息走 AOP/MDC/埋点，不塞进 `T`。业务组件自身返回纯业务对象，包装成 `ZoneResult` 是接入层（Controller）的事。
 
 **判定问句**：返回值里有没有调用方根本不需要的字段？调用方拿返回值只做本组件职责内的事，够吗？
 
