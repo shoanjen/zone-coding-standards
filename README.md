@@ -17,7 +17,7 @@ Java 编码规范基线（Agent Skill）：AI 执行任何 Java 编码任务（�
 | `references/naming-guide.md` | 命名规范：通用五条 + **类/方法/变量分类细则**；宽泛词禁令的「语义落点」豁免原则；**入参对象化**（参数 >=2 抽 Req/语义对象） |
 | `references/component-guide.md` | 组件规范：通用沉淀、单一职责、返回值收敛、中间逻辑私有化（含 Spring Boot 写法） |
 | `references/layering-guide.md` | 分层规范：Controller 层三条——依赖边界（只依赖 Service、禁持久层）、职责边界（不写业务逻辑）、路径版本化（api/v1/xxx） |
-| `references/ddd-layering-guide.md` | 分层规范：DDD 多模块工程七条——领域框架无关、依赖方向、依赖倒置、对象归位、装配根、ArchUnit 守护、**包结构与类命名规约**（逐包包结构表 + 后缀强制 XxxReq/XxxRes/XxxDO、HTTP 契约只认 Req/Res、包间依赖与包-模块可见性） |
+| `references/ddd-layering-guide.md` | 分层规范：DDD 多模块工程七条——领域框架无关、依赖方向、依赖倒置、对象归位、装配根、ArchUnit 守护、**包结构与类命名规约**（逐包包结构表 + 后缀强制 XxxReq/XxxRes/XxxDO、HTTP 契约只认 Req/Res、包间依赖与包-模块可见性、命名规约 ArchUnit 测试化 + 存量成对全量核验） |
 | `references/springboot-guide.md` | 工程惯例：Lombok 优先（样板注解化 + 典型坑 + ZoneLog 日志门面）、字段注入为主（@Resource/@Autowired，DDD 模板工程例外）、**事务编程式（禁 @Transactional + 领域事件提交后发布等铁律）** |
 | `references/zone-middleware-guide.md` | 中间件二方包使用规约（zone-middleware-support）：接入坐标纪律、能力一律走门面（门面速查表）、ZoneResult/ZoneBusinessException 与错误码段、fastjson2 禁 jackson 与配置官方键优先、横切线程规约（签名/凭证头/MDC）、DDD 分层落位表 |
 | `references/alibaba-core.md` | 阿里手册【强制】条款速查（泰山版自写提炼，以原文为准） |

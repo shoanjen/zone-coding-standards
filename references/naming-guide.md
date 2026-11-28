@@ -371,6 +371,7 @@ private void markRead(MarkReadCmd cmd) { ... }                         // 内部
 - **构造器不受此条约束**：构造器的多字段参数是对象不变式的本义（领域实体构造器、全参构造），对象本身就是参数聚合，不存在「再抽一个对象」；
 - **框架契约方法不受控**：覆写的框架方法（如 `doFilter(req, resp, chain)`）与调用的库 API 签名不归我们定，按规则二「框架落点」豁免；
 - **单参数不抽**：1 个参数天然已是对象或语义完整，不为形式强拆；
+- **`(id, value)` 型单实体状态变更可豁免**：`setStatus(keyId, status)`、`tryAcquireQpm(appId, qpmLimit)` 这类「定位键 + 状态值」两参，语义自读且多为热路径——❌ 强拆 `KeyStatusCmd` 反增仪式 ✅ 散参放行，豁免范围在 package-info 登记口径。判定问句：拆成对象后，调用点语义可读性变好了吗？
 - Req 对象是参数校验的载体：@NotBlank 等校验注解放对象字段上，@Valid 触发——呼应手册「入口层完成参数合法性校验」；
 - **Req 继承二方包 `BaseRequest`**（reqId/platform/ip 等通用契约字段，中间件二方包基准）时，类上必须补 `@EqualsAndHashCode(callSuper = true)`，否则 equals 不含父类字段（同 Lombok 继承坑，见 springboot-guide.md 规则一）。
 

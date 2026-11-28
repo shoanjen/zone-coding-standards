@@ -109,9 +109,9 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
 6. **结构由测试守护**：分层规则用 ArchUnit 写进装配根测试域（排除测试代码），违规 `mvn test` 红；新增规则同步依赖方向图。
    ❌ 分层靠 review 口头把关 ✅ 分层规则测试化，构建即拦截
    判定问句：这条分层约定，机器在 `mvn test` 里能拦住吗？不能 → 补规则。
-7. **包结构与类命名规约**：模块内包划分与类后缀全部固定——Req 落 request 包、Res 落 response 包、表对象必须 `XxxDO` 后缀落 persistence.dataobject，Converter/Translator/Mapper/RepositoryImpl/GatewayImpl 各归其包；**HTTP 契约进出口只认 Req/Res**，domain 实体/DO/值对象/领域事件禁入 Controller 与应用服务签名；service 对外只暴露接口 + Req/Res 三件套，infrastructure 对外零 API，包名小写单数。
-   ❌ Controller 返回 Order 实体、表对象叫 `OrderInfo`、返参拼 Map ✅ 返参 `XxxRes`（response 包）、表对象 `XxxDO`（dataobject 包）
-   判定问句：这个类的包路径和后缀，与它的职责对得上吗？
+7. **包结构与类命名规约**：模块内包划分与类后缀全部固定——Req 落 request 包、Res 落 response 包、表对象必须 `XxxDO` 后缀落 persistence.dataobject，Converter/Translator/Mapper/RepositoryImpl/GatewayImpl 各归其包，`manager` 包只收有行为的可复用业务能力组件（纯数据壳归 domain.valueobject 或 request/response，详例见 ddd-layering-guide「manager 包」）；**HTTP 契约进出口只认 Req/Res**，domain 实体/DO/值对象/领域事件禁入 Controller 与应用服务签名；service 对外只暴露接口 + Req/Res 三件套，infrastructure 对外零 API，包名小写单数；**命名规约与分层规约同等测试化**——包路径与类后缀用 ArchUnit 守护，`mvn test` 红 = 违规。
+   ❌ Controller 返回 Order 实体、表对象叫 `OrderInfo`、审计只抽新建类命名（存量 DO 类逐个漏检） ✅ 返参 `XxxRes`（response 包）、表对象 `XxxDO`（dataobject 包）、命名规则测试化构建即拦截
+   判定问句：这个类的包路径和后缀，与它的职责对得上吗？这条命名规约，机器在 `mvn test` 里能拦住吗？
 
 ## Spring Boot 工程惯例（三条）
 
@@ -141,6 +141,7 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
 3. **返回体与异常统一**：出参 `ZoneResult.ok(...)` 包装（包装归 Controller），业务失败抛 `ZoneBusinessException(BusinessError.XXX, message)` 交全局 advice 兜底；码段 `SYS-` 二方包独占、`BIZ-4001–4099` 保留，业务自定义码用 `BIZ-7xxx`/`BIZ-9xxx` 未占段；判成功用 `isSuccess()`，不比对码字面量。
    ❌ 自造 ApiResult、裸 RuntimeException、魔法字符串当错误码 ✅ 标准异常 + 标准码段
    判定问句：这个失败，会被统一异常体系翻译成标准错误码吗？
+   **边界解析定码**：凡解析请求/外部输入的数字、日期、枚举，应用层 try-catch → `BIZ-4001`（禁 `NumberFormatException`/`DateTimeParseException` 裸抛落 SYS-9999）。**service impl 兜底 guard**：公共方法最外层 try-catch——定码异常透传、其余留痕重抛（禁吞：破坏状态一致性；禁转码：污染 SYS 段）。try-catch 合法场景仅三类：边界翻译 / 资源清理 finally / 切面与异步兜底（留痕日志）。扫描口径：扫 `new XxxException` 裸构造（`orElseThrow(() -> new ...)` 无 `throw` 关键字）。
 4. **JSON 与配置纪律**：JSON 一律 fastjson2（`JsonUtil` 收口），禁引 jackson；连接/池/超时/迁移配置全走 Spring Boot 官方键（`spring.datasource.*` / `spring.data.redis.*` / `spring.flyway.*` / `spring.http.client.*`），`zone.middleware.*` 只放行为项（log/security/web/http）；同一配置勿 yml 与 properties 重复定义。
    ❌ 手写 ObjectMapper、`zone.middleware.redis.host` 方言键 ✅ `JsonUtil.toJson(...)` + 官方键
    判定问句：这个 JSON / 配置项，官方键或 JsonUtil 能接住吗？
@@ -151,4 +152,5 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
 ## 编码自检
 
 - **落笔前**：命名过五条；**方法签名先过入参对象化**（>= 2 抽对象）；新写组件先想职责边界；接入层代码先想分层边界（只依赖应用层、不写业务）；**DDD 多模块工程先对七条**（领域纯净、依赖方向、依赖倒置、对象归位、装配根、测试守护、包结构与后缀落位——新类先查包结构表定包定后缀），**用到中间件能力先对二方包**（坐标对不对、门面有没有、错误码用哪个段）。
-- **交付前**：组件过四条、Controller 过三条、DDD 工程七条（Controller/应用服务逐签名过一遍：入参 XxxReq、返参 XxxRes，entity/DO 不上契约；表对象 XxxDO 后缀齐）、工程惯例过三条（样板换注解、依赖字段注入或项目约定的构造器注入、事务编程式）、二方包过五条（坐标 type=pom、能力走门面、ZoneResult/ZoneBusinessException、fastjson2 + 官方键、横切三铁律）；再对照手册【强制】条款速查（[references/alibaba-core.md](references/alibaba-core.md)）扫一遍。
+- **交付前**：Controller 逐行复核（除传输适配/调服务/组返回外零残留）、组件过四条、Controller 过三条、DDD 工程七条（Controller/应用服务逐签名过一遍：入参 XxxReq、返参 XxxRes，entity/DO 不上契约；表对象 XxxDO 后缀齐）、工程惯例过三条（样板换注解、依赖字段注入或项目约定的构造器注入、事务编程式）、二方包过五条（坐标 type=pom、能力走门面、ZoneResult/ZoneBusinessException、fastjson2 + 官方键、横切三铁律）；**存量类核验按「包路径 + 类后缀」成对全量清单核对，不许只抽样新建类**；再对照手册【强制】条款速查（[references/alibaba-core.md](references/alibaba-core.md)）扫一遍。
+- **鉴权/契约类整改交付前必须运行时实证**：① 全端点无凭证裸调矩阵（管理面期望统一未授权码、数据面期望协议错误码，逐端点断言）；② 契约改造先抓改造前响应基线，改造后字段级 diff 零差异再交付。判定问句：你的「已全部鉴权」结论，是 curl 出来的还是读代码读出来的？

@@ -162,7 +162,10 @@ public class CouponAppService {
 
 - `@Service` 等 Spring 组件注解在应用层**允许**（「框架无关」约束的是领域层，不是应用层）；但**事务实现禁止 `@Transactional` 注解**——事务边界归应用层，写法必须编程式 `TransactionTemplate`（见 [springboot-guide.md](springboot-guide.md) 规则三）；
 - 应用层的日志门面、统一异常允许使用（横切能力），但中间件能力包（HTTP 客户端/Redis/数据源）禁止——判据：它是不是「实现细节的入口」。
-- 应用层 `manager` 包（通用业务组件）同样只依赖领域接口：可复用业务能力（业务编号生成、金额分摊、通用校验）沉淀于此；封装第三方协议/出站 HTTP/Redis 的能力一律下沉 infrastructure.gateway——判据与上一条相同。类名业务贴合（如 `OrderIdGenerator`），禁 `XxxManager` 泛称（同命名规范「禁宽泛词」）。
+- 应用层 `manager` 包（通用业务组件）同样只依赖领域接口：可复用业务能力（业务编号生成、金额分摊、通用校验）沉淀于此；封装第三方协议/出站 HTTP/Redis 的能力一律下沉 infrastructure.gateway——判据与上一条相同。类名业务贴合（如 `OrderIdGenerator`），禁 `XxxManager` 泛称（同命名规范「禁宽泛词」）。 纯数据壳禁入：无行为的身份/状态载体不是「组件」——会话主体、上下文值对象归 `domain.valueobject`，契约载体归 `request`/`response`。
+  ❌ `service.manager.AdminPrincipal`（@Data 纯 userId/username 数据壳，零行为零复用）
+  ✅ `domain.valueobject.AdminSession`（record 不可变会话主体值对象）+ `service.manager.FailoverEngine`（容灾决策引擎，真·可复用业务能力）
+  判定问句：这个类抽掉数据只剩行为吗？没行为 → 不是组件，按归属落位。
 - 领域服务是纯 Java 对象（domain 禁 Spring 注解），由**使用方模块**的 `@Configuration` 注册为 Bean（模板示范：应用层 config 包注册计价领域服务；跨模块装配归装配根）。
 
 ---
@@ -197,6 +200,7 @@ public ZoneResult<OrderDetailRes> detail(@Valid OrderQueryReq req) {
 
 - 全局异常处理、链路 Filter 属适配层自身设施，由二方包 `zone-middleware-web` 自动装配提供（`ZoneGlobalExceptionAdvice`/`ZoneTraceInboundFilter`，开关 `zone.middleware.web.*`），**工程不自有、不重复造**；
 - Interceptor/CORS/文档配置归适配层的 Web 配置类，不算业务依赖。
+- **流式交付端点（SSE / 文件下载）**：允许 web 层持有 `SseEmitter` / `HttpServletResponse` 传输原语，但事件时序与编排归应用层——经 service 层定义的流式 SPI 回调交付（service 定义 `XxxStreamSink` 接口如 `onEvent(SinkEvent)` / `onComplete()`，web 端实现持有 emitter 做转发），Controller 只做订阅与返回 emitter。判定问句：SSE 编排逻辑在 Controller 里吗？在 → 越界。
 
 ---
 
@@ -245,7 +249,7 @@ RepositoryImpl：orderMapper.selectById() → OrderDO → Translator.toEntity(do
 
 ## 规则六：结构由测试守护——ArchUnit 随包前缀迁移
 
-分层规则不是口头约定：用 ArchUnit 写进**装配根模块的测试域**（不随业务代码发布），违规 `mvn test` 直接红。基线六条（与模板守护测试 `DddLayerRulesTest` 对齐）：①领域层框架无关（禁依赖含中间件二方包 `com.zone.middleware..`）；②应用层不触基础设施（禁依赖 infrastructure、MyBatis-Plus、二方包 http/redis/database 能力包）；③适配层不触基础设施；④基础设施不反向依赖；⑤common 中立（不得依赖任何业务层，但可用框架与工具——common 的中立指不依赖业务层，并非框架无关）；⑥layeredArchitecture 依赖方向总纲（适配层仅被装配根访问、应用层仅被适配层与装配根访问、基础设施层仅被装配根访问、装配根不被任何层访问）。
+分层规则不是口头约定：用 ArchUnit 写进**装配根模块的测试域**（不随业务代码发布），违规 `mvn test` 直接红。基线六条（与模板守护测试 `DddLayerRulesTest` 对齐）：①领域层框架无关（禁依赖含中间件二方包 `com.zone.middleware..`）；②应用层不触基础设施（禁依赖 infrastructure、MyBatis-Plus、二方包 http/redis/database 能力包）；③适配层不触基础设施；④基础设施不反向依赖；⑤common 中立（不得依赖任何业务层，但可用框架与工具——common 的中立指不依赖业务层，并非框架无关）；⑥layeredArchitecture 依赖方向总纲（适配层仅被装配根访问、应用层仅被适配层与装配根访问、基础设施层仅被装配根访问、装配根不被任何层访问）。规则七的**命名规约同等测试化**，守护模板见规则七。
 
 ### 反例 / 正例
 
@@ -323,7 +327,20 @@ Controller 与应用服务的方法签名（入参、返参）**只允许出现 
 
 ### 守护与边界情况
 
-- 模块级违例已被规则二/三的 ArchUnit 拦住（适配/应用层禁 infra、领域禁框架）；**包级签名违例**（返参 entity、DO 缺后缀、Req/Res 落错包）走自检：落笔前对包结构表，交付前 Controller/应用服务逐签名过一遍「它是 request/response 包的吗」；真实违例反复出现时，按规则六「从真实违例出发」补 ArchUnit 规则（如 web.. 禁依赖 domain.entity..）；
+- 模块级违例已被规则二/三的 ArchUnit 拦住（适配/应用层禁 infra、领域禁框架）；**命名规约与分层规约同等测试化**——包路径与类后缀直接写成 ArchUnit 规则，不许沦为纯人工抽查项：
+
+  ```java
+  // ✅ 命名测试化（与模板 DddLayerRulesTest 并列，规则七配套）
+  @Test
+  void 数据对象类名必须以DO结尾() {
+      classes().that().resideInAPackage("..persistence.dataobject..")
+              .should().haveSimpleNameEndingWith("DO")
+              .because("表映射对象统一 DO 后缀——包路径与类后缀成对核验，机器可拦")
+              .check(classes);
+  }
+  ```
+
+  request 包 `*Req`、response 包 `*Res` 同法各写一条；同一包内有统一业务前缀的类再加 `haveSimpleNameStartingWith(...)` 联合断言收窄；**包级签名违例**（返参 entity、Req/Res 落错包）走自检：落笔前对包结构表，交付前 Controller/应用服务逐签名过一遍「它是 request/response 包的吗」；**存量核验按「包路径 + 类后缀」成对全量清单核对，不许只抽样新建类**；真实违例反复出现时，按规则六「从真实违例出发」补规则（如 web.. 禁依赖 domain.entity..）；
 - 包名一律小写单数（entity / valueobject / request / response），与模板一致；增设新包必须回答「现有哪个包装不下、为什么」，不为分类好看加包。
 
 **判定问句**：这个类的包路径和后缀，与它在包结构表里的职责对得上吗？对不上 = 落位或命名违例。

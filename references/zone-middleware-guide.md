@@ -66,6 +66,7 @@
 
 - 多模块 DDD 工程的落位（能力就近、domain 纯净，详见文末落位表）：套件坐标只落**装配根**一处，能力模块按层各落各家，pom 不散落；
 - 必配项缺失启动即快速失败：引入 database 必配 `spring.datasource.url`；security 的 `sign.enabled` 默认 `true`，启用签名校验必配 `zone.middleware.security.sign.secret`（不需要时显式设 `false`）；
+- **能力豁免「三件套」登记**：suite 能力未接入 ≠ 违规，但豁免必须可被机器查到——① yml 显式开关（`enabled: false`）② 同处注释写明豁免理由 ③ 决策记录（AGENTS.md 备注或项目记忆）。审计发现能力零命中时按「遗漏 vs 有意豁免」二分：三件套齐全 → 引用决策不放违规；缺任一 → 按「遗漏」整改或补登记。判定问句：下一轮审计（或下一个会话）不问人，能从仓库里查出「这是有意不用」吗？
 - 版本升级属二方包 SNAPSHOT 期，破坏性变更可能发生（如 2026-11-27 成功码改 `"200"`、http 熔断移除、包路径迁移）——升级后以当前源码为准，不凭记忆写 API。
 
 ---
@@ -189,6 +190,7 @@ if (order.isPaid()) {
 - 判断成败一律 `result.isSuccess()`，不比对 `"200"` 字面量（成功码历史上从 `SUCCESS` 改为 `"200"`，字面量判等是升级地雷）；
 - 二方包错误码不够用时：实现 `ZoneError` 接口建业务错误码枚举（码取 `BIZ-7xxx`/`BIZ-9xxx` 未占段），`ZoneBusinessException` 照常抛——扩而不裂；
 - 内部实现细节（SQL 异常、空指针等）不往上抛——全局兜底统一翻译为 `SYS-9999`，不泄露内部细节；
+- **异常审计口径：扫裸构造，不只扫 `throw new`**——`orElseThrow(() -> new ...)`、Supplier、三元表达式内的异常构造都没有 `throw` 关键字，只 grep `throw new` 必漏。❌ `findById(id).orElseThrow(() -> new IllegalStateException("密钥不存在"))`（逃过 `throw new` 扫描，被全局兜底翻译成 SYS-9999，丢失 BIZ-4004 语义） ✅ `orElseThrow(() -> new ZoneBusinessException(BusinessError.DATA_NOT_FOUND, "密钥不存在"))`。判定问句：这个异常构造，不经过 `throw` 关键字就能被你的扫描发现吗？
 - 全局异常处理器与 Trace Filter 本身由 `zone-middleware-web` 自动装配（`ZoneGlobalExceptionAdvice`/`ZoneTraceInboundFilter`），**工程不自有**，开关 `zone.middleware.web.exception-advice-enabled` / `trace-filter-enabled` 默认关、模板工程显式开。
 
 ---
