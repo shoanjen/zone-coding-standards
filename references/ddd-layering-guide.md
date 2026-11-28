@@ -205,7 +205,7 @@ public ZoneResult<OrderDetailRes> detail(@Valid OrderQueryReq req) {
 | 对象 | 所在层 | 职责 |
 |---|---|---|
 | entity / valueobject | domain | 领域模型，业务行为内聚 |
-| DO（dataobject） | infrastructure | 表映射，持久化注解只在此 |
+| DO（dataobject） | infrastructure | 表映射，持久化注解只在此；**类名必须 `XxxDO` 后缀**，落 `persistence.dataobject` 包 |
 | Req / Res | service（应用层） | 接口契约；校验注解在 Req |
 | Converter | service（应用层） | 领域对象 → Res |
 | Translator | infrastructure | DO ↔ 领域实体 |
@@ -213,13 +213,15 @@ public ZoneResult<OrderDetailRes> detail(@Valid OrderQueryReq req) {
 ### 反例
 
 ```java
-// ❌ 对象越层流转
+// ❌ 对象越层流转（实查违例形态）
+Controller 方法返参是 Order 实体       // HTTP 契约泄漏 domain.entity——领域模型直接出领域
+Controller 入参散参或 Map             // 绕开 request 包的 Req 契约，契约黑洞
 web 层出现 OrderDO                    // 表模型直接出适配层
 service 层 import infrastructure 的 Translator  // 应用层认识实现细节
 domain 的 Order 实体上带 @TableName   // 见规则一
 ```
 
-错在哪：表模型一旦出基础设施层，改列名就是全工程编译事故；转换职责一混，DO↔实体 与 实体→Res 两类加工互相污染。
+错在哪：HTTP 契约一旦出现 entity，领域模型改动直接波及对外接口与序列化报文；表模型一旦出基础设施层，改列名就是全工程编译事故；转换职责一混，DO↔实体 与 实体→Res 两类加工互相污染。
 
 ### 正例
 
@@ -230,7 +232,7 @@ AppService：orderRepository.findById() → Order（实体）→ Converter.toRes
 RepositoryImpl：orderMapper.selectById() → OrderDO → Translator.toEntity(do)
 ```
 
-对在哪：每类对象只在自己的层里出生和转换；DO 永不出 infra，实体可以出 domain 进 service/web（经 Converter 变 Res）。
+对在哪：每类对象只在自己的层里出生和转换；**HTTP 契约的进出口只认 request/response 包的 XxxReq/XxxRes**——entity/DO/值对象/领域事件一个都不出现在 Controller 与应用服务的方法签名上；DO 永不出 infra，实体可以出 domain 进 service/web（经 Converter 变 Res）。
 
 **判定问句**：这个对象的包路径，和它的职责对得上吗？转换逻辑出现在「非归属层」= 越位。
 
@@ -267,6 +269,64 @@ void 领域层应为框架无关纯领域层() {
 
 - 导入范围排除测试代码（`ImportOption.DoNotIncludeTests`），只约束主代码；
 - 新增守护规则时从「真实违例」出发，不为规则而规则。
+
+---
+
+## 规则七：包结构与类命名规约——包即边界，名即落位
+
+规则一到六管「模块间」的方向与流转，本条管「模块内」的落位：模块内的包划分、每个类的后缀命名、包与包的依赖、包对其他模块的可见性，全部按模板工程逐包固定。包路径与类后缀是机器可查的边界——落位错、后缀缺，即违例，不靠口头约定。
+
+### 各模块包结构（对照模板工程逐包核实，后缀强制）
+
+| 模块 | 包 | 放什么 | 类命名（后缀强制） |
+|---|---|---|---|
+| domain | entity | 领域实体（充血） | 无后缀，业务名（`Order`） |
+| domain | valueobject | 值对象、枚举 | 无后缀（`Money`、`OrderStatus`） |
+| domain | service | 领域服务 | `XxxService`（纯 Java，禁 @Service 注解，@Bean 注册） |
+| domain | repository | 仓储接口 | `XxxRepository` |
+| domain | gateway | 防腐网关接口 | `XxxGateway` |
+| domain | event | 领域事件 | `XxxEvent`（record） |
+| service | service | 应用服务接口（契约） | `XxxAppService`（Query / Command 读写分开） |
+| service | service.impl | 应用服务实现 | `XxxAppServiceImpl` |
+| service | request | 入参契约 | `XxxReq` |
+| service | response | 返参契约 | `XxxRes` |
+| service | converter | 实体 → Res | `XxxConverter` |
+| service | manager | 通用业务组件 | 业务贴合名（`OrderIdGenerator`），禁 `XxxManager` 泛称 |
+| service | config | 本模块 Bean 注册 | `XxxConfig`（领域服务 @Bean 在此） |
+| infrastructure | persistence.dataobject | 表映射对象 | **`XxxDO`（DO 后缀强制）** |
+| infrastructure | persistence.mapper | ORM 接口 | `XxxMapper` |
+| infrastructure | persistence.repository | 仓储实现 | `XxxRepositoryImpl` |
+| infrastructure | persistence.translator | DO ↔ 实体 | `XxxTranslator` |
+| infrastructure | gateway | 网关实现 | `XxxGatewayImpl` |
+| web | controller | 接入层 | `XxxController` |
+| web | config | Web 配置 | `XxxConfig` |
+| common | util / constant | 工具、常量 | `XxxUtil` / `XxxConstant` |
+| bootstrap | （根） | 启动类、多环境配置、守护测试 | `XxxApplication` |
+
+### 契约边界：HTTP 进出口只认 Req/Res
+
+Controller 与应用服务的方法签名（入参、返参）**只允许出现 `request`/`response` 包的 Req/Res**；domain 实体、DO、值对象、领域事件一个都不许出现在 HTTP 契约上——entity 是领域内部模型、DO 是表映射，出了各自的包就变成全工程耦合点（见规则四反例）。
+
+### 包间依赖（包与包）
+
+- **domain 内**：entity/valueobject 被 repository、gateway、service 的签名引用；接口包（repository/gateway）不出现任何实现概念，六个包互不反向纠缠；
+- **service 内**：service（接口）→ service.impl → converter / manager / domain 接口；request/response 只被 service 与 web.controller 消费；converter 只被 service.impl 调用，Controller 不直接碰 converter；
+- **infrastructure 内**：persistence.mapper / translator 只被 persistence.repository 使用；gateway 与 persistence.repository 只实现 domain 接口，彼此互不依赖；
+- **web 内**：controller 只依赖 service 的接口包 + request/response（模板实践零 domain import——契约三件套足够）；web.config 只碰 MVC 设施。
+
+### 包对其他模块可见（包与 module）
+
+- **domain：全部包对上暴露**——实体/接口/值对象被 service、infrastructure 合法消费（规则二访问权矩阵）；
+- **service：对外只暴露 `service`（接口）+ `request` + `response`** 契约三件套；service.impl / converter / manager / config 是模块内部实现，其他模块禁止 import；
+- **infrastructure：对外零 API**——只有实现类，任何模块禁止 import infra 的任何包，实现经装配根组件扫描注入；
+- **web：不被任何模块 import**；**common：util/constant 全模块可用，自身不依赖任何业务层**。
+
+### 守护与边界情况
+
+- 模块级违例已被规则二/三的 ArchUnit 拦住（适配/应用层禁 infra、领域禁框架）；**包级签名违例**（返参 entity、DO 缺后缀、Req/Res 落错包）走自检：落笔前对包结构表，交付前 Controller/应用服务逐签名过一遍「它是 request/response 包的吗」；真实违例反复出现时，按规则六「从真实违例出发」补 ArchUnit 规则（如 web.. 禁依赖 domain.entity..）；
+- 包名一律小写单数（entity / valueobject / request / response），与模板一致；增设新包必须回答「现有哪个包装不下、为什么」，不为分类好看加包。
+
+**判定问句**：这个类的包路径和后缀，与它在包结构表里的职责对得上吗？对不上 = 落位或命名违例。
 
 ---
 

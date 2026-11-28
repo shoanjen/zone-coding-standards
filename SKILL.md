@@ -1,6 +1,6 @@
 ---
 name: zone-coding-standards
-description: Java 编码规范基线：AI 执行任何 Java 编码任务（编写、修改、重构、评审、解释 Java 代码，设计 Java 类/组件/服务）时默认装载遵守，无需用户点名。规范裁决链固定为「项目自身规范 > 阿里巴巴 Java 开发手册 > 本 skill 自定义规则」，自定义规则含命名规范五条、方法入参对象化（参数 >=2 禁止平铺，抽 Req/语义对象）、组件规范四条、分层规范（单模块 Controller 层三条：依赖边界/职责边界/路径 api/v1 版本化 + DDD 多模块工程六条：领域框架无关/依赖方向/依赖倒置/对象归位/装配根/ArchUnit 守护）、Spring Boot 工程惯例（Lombok 优先、字段注入为主、事务编程式禁 @Transactional）与中间件二方包使用规约五条（接入坐标纪律 suite 带 type=pom、能力一律走门面 ZoneLog/ZoneRedisTemplate/ZoneHttpTemplate、返回体异常统一 ZoneResult/ZoneBusinessException 与错误码段、JSON fastjson2 禁 jackson 与配置官方键优先、横切线程规约签名/凭证头/MDC 跨线程），每条规则展开必带正反例与判定问句；技术底座默认以 zone-middleware-support 二方包与 zone-boot-template 工程模板为基准，业务示例领域中立、至少跨三个业务场景。触发时机：用户要求实现/修改/重构/评审 Java 代码、解决命名、方法签名、组件设计、分层放置、接口路径、模块划分、事务写法或工程惯例问题，接入或使用 zone-middleware-support 能力（统一返回体、业务异常、日志、Redis、HTTP 客户端、签名鉴权、令牌、JSON、配置键）或基于 zone-boot-template 新建/派生工程时，或在 DDD 多模块工程中新建/迁移模块与代码时，或 AI 自检 Java 代码质量；落笔前装载，而非评审时才补救。
+description: Java 编码规范基线：AI 执行任何 Java 编码任务（编写、修改、重构、评审、解释 Java 代码，设计 Java 类/组件/服务）时默认装载遵守，无需用户点名。规范裁决链固定为「项目自身规范 > 阿里巴巴 Java 开发手册 > 本 skill 自定义规则」，自定义规则含命名规范五条、方法入参对象化（参数 >=2 禁止平铺，抽 Req/语义对象）、组件规范四条、分层规范（单模块 Controller 层三条：依赖边界/职责边界/路径 api/v1 版本化 + DDD 多模块工程七条：领域框架无关/依赖方向/依赖倒置/对象归位/装配根/ArchUnit 守护/包结构与类命名规约（Req 落 request 包、Res 落 response 包、表对象强制 XxxDO 后缀落 persistence.dataobject、HTTP 契约进出口只认 Req/Res 且 entity/DO 禁入签名、包间依赖与包-模块可见性固定）、Spring Boot 工程惯例（Lombok 优先、字段注入为主、事务编程式禁 @Transactional）与中间件二方包使用规约五条（接入坐标纪律 suite 带 type=pom、能力一律走门面 ZoneLog/ZoneRedisTemplate/ZoneHttpTemplate、返回体异常统一 ZoneResult/ZoneBusinessException 与错误码段、JSON fastjson2 禁 jackson 与配置官方键优先、横切线程规约签名/凭证头/MDC 跨线程），每条规则展开必带正反例与判定问句；技术底座默认以 zone-middleware-support 二方包与 zone-boot-template 工程模板为基准，业务示例领域中立、至少跨三个业务场景。触发时机：用户要求实现/修改/重构/评审 Java 代码、解决命名、方法签名、组件设计、分层放置、接口路径、模块划分、包结构与类命名落位、事务写法或工程惯例问题，接入或使用 zone-middleware-support 能力（统一返回体、业务异常、日志、Redis、HTTP 客户端、签名鉴权、令牌、JSON、配置键）或基于 zone-boot-template 新建/派生工程时，或在 DDD 多模块工程中新建/迁移模块与代码时，或 AI 自检 Java 代码质量；落笔前装载，而非评审时才补救。
 ---
 
 # Java 编码规范基线
@@ -13,7 +13,7 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
 
 1. **项目自身规范**（若有）：团队规范、项目 README 中的约定，最优先。
 2. **阿里巴巴 Java 开发手册**：Java 项目直接适用；【强制】条款速查见 [references/alibaba-core.md](references/alibaba-core.md)。
-3. **本 skill 自定义规则**：命名规范五条 + 方法入参对象化 + 组件规范四条 + 分层规范（单模块 Controller 三条 / DDD 多模块六条）+ Spring Boot 工程惯例三条 + 中间件二方包使用规约五条，补手册未覆盖或需强化处。
+3. **本 skill 自定义规则**：命名规范五条 + 方法入参对象化 + 组件规范四条 + 分层规范（单模块 Controller 三条 / DDD 多模块七条）+ Spring Boot 工程惯例三条 + 中间件二方包使用规约五条，补手册未覆盖或需强化处。
 4. 条款冲突取**更严格**者；裁决不了问用户。
 
 ## 硬约束
@@ -85,9 +85,9 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
    ❌ `/orders/{id}`（无版本）、`/api/orders`（无版本）✅ `/api/v1/orders/{id}`
    判定问句：路径是 `api/v1/xxx` 格式、版本号带了吗？没有 → 补齐再落笔。
 
-## 分层规范 · DDD 多模块工程（六条）
+## 分层规范 · DDD 多模块工程（七条）
 
-适用 Maven 多模块 DDD 工程（模块划分 domain / infrastructure / service / web / bootstrap / common）；单体三层工程的 Controller 条款即上一节。详述、正反例与派生迁移指引见 [references/ddd-layering-guide.md](references/ddd-layering-guide.md)。
+适用 Maven 多模块 DDD 工程（模块划分 domain / infrastructure / service / web / bootstrap / common）；单体三层工程的 Controller 条款即上一节。详述、正反例、包结构表与派生迁移指引见 [references/ddd-layering-guide.md](references/ddd-layering-guide.md)。
 
 依赖方向固定单向：`web(适配) → service(应用) → domain(领域) ← infrastructure(实现)`，装配根（bootstrap）运行期注入实现并用 ArchUnit 守护。
 
@@ -107,8 +107,11 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
    ❌ 业务散在启动模块、其他模块依赖启动模块 ✅ bootstrap 只做装配 + 守护测试
    判定问句：启动模块里出现业务代码了吗？出现 = 越界。
 6. **结构由测试守护**：分层规则用 ArchUnit 写进装配根测试域（排除测试代码），违规 `mvn test` 红；新增规则同步依赖方向图。
-   ❌ 分层靠 review 口头把关 ✅ 六条规则测试化，构建即拦截
+   ❌ 分层靠 review 口头把关 ✅ 分层规则测试化，构建即拦截
    判定问句：这条分层约定，机器在 `mvn test` 里能拦住吗？不能 → 补规则。
+7. **包结构与类命名规约**：模块内包划分与类后缀全部固定——Req 落 request 包、Res 落 response 包、表对象必须 `XxxDO` 后缀落 persistence.dataobject，Converter/Translator/Mapper/RepositoryImpl/GatewayImpl 各归其包；**HTTP 契约进出口只认 Req/Res**，domain 实体/DO/值对象/领域事件禁入 Controller 与应用服务签名；service 对外只暴露接口 + Req/Res 三件套，infrastructure 对外零 API，包名小写单数。
+   ❌ Controller 返回 Order 实体、表对象叫 `OrderInfo`、返参拼 Map ✅ 返参 `XxxRes`（response 包）、表对象 `XxxDO`（dataobject 包）
+   判定问句：这个类的包路径和后缀，与它的职责对得上吗？
 
 ## Spring Boot 工程惯例（三条）
 
@@ -147,5 +150,5 @@ description: Java 编码规范基线：AI 执行任何 Java 编码任务（编�
 
 ## 编码自检
 
-- **落笔前**：命名过五条；**方法签名先过入参对象化**（>= 2 抽对象）；新写组件先想职责边界；接入层代码先想分层边界（只依赖 Service、不写业务）；**DDD 多模块工程先对六条**（领域纯净、依赖方向、依赖倒置、对象归位、装配根、测试守护），新模块/新类先确认落点层；**用到中间件能力先对二方包**（坐标对不对、门面有没有、错误码用哪个段）。
-- **交付前**：组件过四条、Controller 过三条、DDD 工程六条、工程惯例过三条（样板换注解、依赖字段注入或项目约定的构造器注入、事务编程式）、二方包过五条（坐标 type=pom、能力走门面、ZoneResult/ZoneBusinessException、fastjson2 + 官方键、横切三铁律）；再对照手册【强制】条款速查（[references/alibaba-core.md](references/alibaba-core.md)）扫一遍。
+- **落笔前**：命名过五条；**方法签名先过入参对象化**（>= 2 抽对象）；新写组件先想职责边界；接入层代码先想分层边界（只依赖应用层、不写业务）；**DDD 多模块工程先对七条**（领域纯净、依赖方向、依赖倒置、对象归位、装配根、测试守护、包结构与后缀落位——新类先查包结构表定包定后缀），**用到中间件能力先对二方包**（坐标对不对、门面有没有、错误码用哪个段）。
+- **交付前**：组件过四条、Controller 过三条、DDD 工程七条（Controller/应用服务逐签名过一遍：入参 XxxReq、返参 XxxRes，entity/DO 不上契约；表对象 XxxDO 后缀齐）、工程惯例过三条（样板换注解、依赖字段注入或项目约定的构造器注入、事务编程式）、二方包过五条（坐标 type=pom、能力走门面、ZoneResult/ZoneBusinessException、fastjson2 + 官方键、横切三铁律）；再对照手册【强制】条款速查（[references/alibaba-core.md](references/alibaba-core.md)）扫一遍。
